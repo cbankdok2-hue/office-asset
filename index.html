@@ -1,274 +1,285 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Office Asset List</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f9f9f9;
-      padding: 20px;
-    }
-    h2 {
-      text-align: center;
-      color: #333;
-    }
-    .btn-group {
-      display: flex;
-      justify-content: center;
-      gap: 10px;
-      margin-bottom: 15px;
-      flex-wrap: wrap;
-    }
-    button {
-      background: #007bff;
-      border: none;
-      color: white;
-      padding: 8px 14px;
-      border-radius: 5px;
-      cursor: pointer;
-      transition: 0.2s;
-    }
-    button:hover { background: #0056b3; }
-    #searchBox {
-      display: block;
-      margin: 0 auto 15px auto;
-      padding: 8px 12px;
-      width: 50%;
-      max-width: 400px;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-      font-size: 16px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 10px;
-      background: white;
-    }
-    th, td {
-      border: 1px solid #ccc;
-      padding: 8px;
-      text-align: center;
-    }
-    th {
-      background: #007bff;
-      color: white;
-    }
-    tr:nth-child(even) { background: #f2f2f2; }
-    .edit-btn { background: #28a745; }
-    .edit-btn:hover { background: #1f7a33; }
-    .delete-btn { background: #dc3545; }
-    .delete-btn:hover { background: #a71d2a; }
-    .status {
-      text-align: center;
-      margin-top: 10px;
-      font-weight: bold;
-      color: #555;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Office Asset List (Live Update)</title>
+<style>
+  body {
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    background: #f4f6f8;
+    margin: 0;
+    padding: 20px;
+  }
+  h2 {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+  #controls {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+  }
+  button {
+    background-color: #1976d2;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button:hover {
+    background-color: #1565c0;
+  }
+  input[type="text"] {
+    padding: 8px;
+    width: 220px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  th, td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: center;
+  }
+  th {
+    background-color: #1976d2;
+    color: white;
+  }
+  tr:nth-child(even) {
+    background-color: #f9f9f9;
+  }
+  .edit-btn {
+    background-color: #43a047;
+  }
+  .delete-btn {
+    background-color: #e53935;
+  }
+  .edit-btn:hover {
+    background-color: #2e7d32;
+  }
+  .delete-btn:hover {
+    background-color: #c62828;
+  }
+  #status {
+    text-align: center;
+    margin-top: 10px;
+    font-style: italic;
+  }
+</style>
 </head>
 <body>
 
-  <h2>🏢 Office Asset List (Google Sheet Live)</h2>
+<h2>🏢 Office Asset List (Live Google Sheet)</h2>
 
-  <div class="btn-group">
-    <button id="loadGoogle">🔄 Load from Google Sheet</button>
-    <button id="addRow">➕ Add Row</button>
-    <button id="exportExcel">📤 Export to Excel</button>
-  </div>
+<div id="controls">
+  <button id="loadGoogle">🔄 Load from Google Sheet</button>
+  <button id="addRow">➕ Add New Asset</button>
+  <button id="exportExcel">📤 Export to Excel</button>
+  <input type="text" id="searchBox" placeholder="🔍 Search..." />
+</div>
 
-  <!-- 🔍 Search Filter -->
-  <input type="text" id="searchBox" placeholder="🔍 Search assets... (any field)" />
+<table id="assetTable">
+  <thead>
+    <tr>
+      <th>Equipment</th>
+      <th>Equipment Description</th>
+      <th>Serial Number</th>
+      <th>DOK B-CORD</th>
+      <th>User</th>
+      <th>Location</th>
+      <th>Edit</th>
+      <th>Delete</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
 
-  <table id="assetTable">
-    <thead>
-      <tr>
-        <th>Equipment</th>
-        <th>Equipment Description</th>
-        <th>Serial Number</th>
-        <th>DOK B-CORD</th>
-        <th>User</th>
-        <th>Location</th>
-        <th>Edit</th>
-        <th>Delete</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+<p id="status">Ready.</p>
 
-  <p class="status" id="status">No data loaded yet.</p>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const tableBody = document.querySelector("#assetTable tbody");
+const status = document.getElementById("status");
+const searchBox = document.getElementById("searchBox");
+let allRecords = []; // for comparison and refresh
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script>
-    const tableBody = document.querySelector("#assetTable tbody");
-    const status = document.getElementById("status");
-    const searchBox = document.getElementById("searchBox");
+// Normalize and match headers
+function normalizeHeader(header) {
+  return header.toLowerCase().replace(/\s|_/g, '');
+}
+function matchHeader(headers, possibleNames) {
+  const normalized = headers.map(normalizeHeader);
+  for (let name of possibleNames) {
+    const index = normalized.indexOf(normalizeHeader(name));
+    if (index !== -1) return headers[index];
+  }
+  return null;
+}
 
-    let allRecords = []; // keep full data for search filtering
+// === Display Data ===
+function displayData(records) {
+  tableBody.innerHTML = "";
+  if (records.length === 0) {
+    status.textContent = "No data found.";
+    return;
+  }
+  const headers = Object.keys(records[0]);
+  const keys = {
+    equipment: matchHeader(headers, ["Equipment"]),
+    desc: matchHeader(headers, ["Equipment Description"]),
+    serial: matchHeader(headers, ["Serial Number"]),
+    dok: matchHeader(headers, ["DOK B-CORD"]),
+    user: matchHeader(headers, ["User"]),
+    loc: matchHeader(headers, ["Location"])
+  };
+  let count = 0;
+  records.forEach((r) => {
+    if (!r[keys.equipment]) return;
+    count++;
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${r[keys.equipment]}</td>
+      <td>${r[keys.desc]}</td>
+      <td>${r[keys.serial]}</td>
+      <td>${r[keys.dok]}</td>
+      <td>${r[keys.user]}</td>
+      <td>${r[keys.loc]}</td>
+      <td><button class="edit-btn" onclick="editRow(this)">Edit</button></td>
+      <td><button class="delete-btn" onclick="deleteRow(this)">Delete</button></td>
+    `;
+    tableBody.appendChild(row);
+  });
+  status.textContent = `✅ Loaded ${count} assets. (Last updated: ${new Date().toLocaleTimeString()})`;
+}
 
-    // === Helper functions ===
-    function normalizeHeader(header) {
-      return header.toLowerCase().replace(/\s|_/g, '');
+// === Edit/Delete ===
+window.editRow = function (btn) {
+  const row = btn.parentNode.parentNode;
+  const cells = row.querySelectorAll("td");
+  if (btn.textContent === "Edit") {
+    for (let i = 0; i < cells.length - 2; i++) {
+      const value = cells[i].textContent;
+      cells[i].innerHTML = `<input value="${value}">`;
     }
-    function matchHeader(headers, possibleNames) {
-      const normalized = headers.map(normalizeHeader);
-      for (let name of possibleNames) {
-        const index = normalized.indexOf(normalizeHeader(name));
-        if (index !== -1) return headers[index];
-      }
-      return null;
+    btn.textContent = "Save";
+  } else {
+    for (let i = 0; i < cells.length - 2; i++) {
+      const input = cells[i].querySelector("input");
+      cells[i].textContent = input.value;
     }
+    btn.textContent = "Edit";
+  }
+};
+window.deleteRow = function (btn) {
+  const row = btn.parentNode.parentNode;
+  if (confirm("Are you sure you want to delete this record?")) {
+    row.remove();
+    status.textContent = "🗑️ Row deleted.";
+  }
+};
 
-    // === Display Data ===
-    function displayData(records) {
-      tableBody.innerHTML = "";
-      if (records.length === 0) {
-        status.textContent = "No data found.";
-        return;
-      }
+// === Add Row ===
+document.getElementById("addRow").addEventListener("click", () => {
+  const newRow = document.createElement("tr");
+  newRow.innerHTML = `
+    <td><input placeholder="Equipment"></td>
+    <td><input placeholder="Equipment Description"></td>
+    <td><input placeholder="Serial Number"></td>
+    <td><input placeholder="DOK B-CORD"></td>
+    <td><input placeholder="User"></td>
+    <td><input placeholder="Location"></td>
+    <td><button class="edit-btn" onclick="saveNewRow(this)">Save</button></td>
+    <td><button class="delete-btn" onclick="deleteRow(this)">Delete</button></td>
+  `;
+  tableBody.appendChild(newRow);
+  status.textContent = "🆕 Add new asset and click Save.";
+});
+window.saveNewRow = function (btn) {
+  const row = btn.parentNode.parentNode;
+  const inputs = row.querySelectorAll("input");
+  const values = Array.from(inputs).map((i) => i.value.trim());
+  row.innerHTML = `
+    <td>${values[0]}</td>
+    <td>${values[1]}</td>
+    <td>${values[2]}</td>
+    <td>${values[3]}</td>
+    <td>${values[4]}</td>
+    <td>${values[5]}</td>
+    <td><button class="edit-btn" onclick="editRow(this)">Edit</button></td>
+    <td><button class="delete-btn" onclick="deleteRow(this)">Delete</button></td>
+  `;
+  status.textContent = "✅ New asset added.";
+};
 
-      const headers = Object.keys(records[0]);
-      const keys = {
-        equipment: matchHeader(headers, ["Equipment"]),
-        desc: matchHeader(headers, ["Equipment Description"]),
-        serial: matchHeader(headers, ["Serial Number"]),
-        dok: matchHeader(headers, ["DOK B-CORD"]),
-        user: matchHeader(headers, ["User"]),
-        loc: matchHeader(headers, ["Location"])
-      };
+// === Export to Excel ===
+document.getElementById("exportExcel").addEventListener("click", () => {
+  const wb = XLSX.utils.book_new();
+  const ws_data = [["Equipment", "Equipment Description", "Serial Number", "DOK B-CORD", "User", "Location"]];
+  document.querySelectorAll("#assetTable tbody tr").forEach(row => {
+    const cells = row.querySelectorAll("td");
+    ws_data.push([
+      cells[0].textContent,
+      cells[1].textContent,
+      cells[2].textContent,
+      cells[3].textContent,
+      cells[4].textContent,
+      cells[5].textContent
+    ]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(ws_data);
+  XLSX.utils.book_append_sheet(wb, ws, "Assets");
+  XLSX.writeFile(wb, "Office_Asset_List.xlsx");
+});
 
-      let count = 0;
-      records.forEach((r) => {
-        if (!r[keys.equipment]) return;
-        count++;
-        const row = document.createElement("tr");
-        row.innerHTML = `
-          <td>${r[keys.equipment]}</td>
-          <td>${r[keys.desc]}</td>
-          <td>${r[keys.serial]}</td>
-          <td>${r[keys.dok]}</td>
-          <td>${r[keys.user]}</td>
-          <td>${r[keys.loc]}</td>
-          <td><button class="edit-btn" onclick="editRow(this)">Edit</button></td>
-          <td><button class="delete-btn" onclick="deleteRow(this)">Delete</button></td>
-        `;
-        tableBody.appendChild(row);
-      });
+// === Search Filter ===
+searchBox.addEventListener("keyup", () => {
+  const q = searchBox.value.toLowerCase();
+  document.querySelectorAll("#assetTable tbody tr").forEach(row => {
+    const txt = row.textContent.toLowerCase();
+    row.style.display = txt.includes(q) ? "" : "none";
+  });
+});
 
-      status.textContent = `✅ Loaded ${count} assets.`;
+// === Load from Google Sheet ===
+const GOOGLE_SHEET_CSV_URL =
+  "https://docs.google.com/spreadsheets/d/1UjaZ2GcqlAW4vQWl1F37zp7DBgCpwbYdTEnqSzJqN5I/export?format=csv";
+
+async function loadFromGoogle(auto = false) {
+  try {
+    if (!auto) status.textContent = "⏳ Loading from Google Sheet...";
+    const res = await fetch(GOOGLE_SHEET_CSV_URL);
+    const csv = await res.text();
+    const wb = XLSX.read(csv, { type: "string" });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    const newData = JSON.stringify(json);
+    const oldData = JSON.stringify(allRecords);
+    if (newData !== oldData) {
+      allRecords = json;
+      displayData(json);
+      if (auto) console.log("🔁 Auto-refreshed " + new Date().toLocaleTimeString());
+    } else if (auto) {
+      status.textContent = `✅ Up-to-date (checked ${new Date().toLocaleTimeString()})`;
     }
+  } catch (e) {
+    console.error(e);
+    status.textContent = "❌ Error loading Google Sheet. Check URL/share.";
+  }
+}
+document.getElementById("loadGoogle").addEventListener("click", () => loadFromGoogle(false));
+setInterval(() => loadFromGoogle(true), 60000);
+loadFromGoogle(false);
+</script>
 
-    // === EDIT / DELETE ===
-    window.editRow = function (btn) {
-      const row = btn.parentNode.parentNode;
-      const cells = row.querySelectorAll("td");
-      if (btn.textContent === "Edit") {
-        for (let i = 0; i < cells.length - 2; i++) {
-          const value = cells[i].textContent;
-          cells[i].innerHTML = `<input value="${value}">`;
-        }
-        btn.textContent = "Save";
-      } else {
-        for (let i = 0; i < cells.length - 2; i++) {
-          const input = cells[i].querySelector("input");
-          cells[i].textContent = input.value;
-        }
-        btn.textContent = "Edit";
-      }
-    };
-
-    window.deleteRow = function (btn) {
-      const row = btn.parentNode.parentNode;
-      if (confirm("Are you sure you want to delete this record?")) {
-        row.remove();
-        status.textContent = "🗑️ Row deleted successfully.";
-      }
-    };
-
-    // === ADD NEW ROW ===
-    document.getElementById("addRow").addEventListener("click", () => {
-      const newRow = document.createElement("tr");
-      newRow.innerHTML = `
-        <td><input placeholder="Equipment"></td>
-        <td><input placeholder="Equipment Description"></td>
-        <td><input placeholder="Serial Number"></td>
-        <td><input placeholder="DOK B-CORD"></td>
-        <td><input placeholder="User"></td>
-        <td><input placeholder="Location"></td>
-        <td><button class="edit-btn" onclick="saveNewRow(this)">Save</button></td>
-        <td><button class="delete-btn" onclick="deleteRow(this)">Delete</button></td>
-      `;
-      tableBody.appendChild(newRow);
-      status.textContent = "🆕 New row added. Fill and click Save.";
-    });
-
-    window.saveNewRow = function (btn) {
-      const row = btn.parentNode.parentNode;
-      const inputs = row.querySelectorAll("input");
-      const values = Array.from(inputs).map((i) => i.value.trim());
-      row.innerHTML = `
-        <td>${values[0]}</td>
-        <td>${values[1]}</td>
-        <td>${values[2]}</td>
-        <td>${values[3]}</td>
-        <td>${values[4]}</td>
-        <td>${values[5]}</td>
-        <td><button class="edit-btn" onclick="editRow(this)">Edit</button></td>
-        <td><button class="delete-btn" onclick="deleteRow(this)">Delete</button></td>
-      `;
-      status.textContent = "✅ New asset added successfully.";
-    };
-
-    // === EXPORT TO EXCEL ===
-    document.getElementById("exportExcel").addEventListener("click", () => {
-      const wb = XLSX.utils.book_new();
-      const ws_data = [["Equipment", "Equipment Description", "Serial Number", "DOK B-CORD", "User", "Location"]];
-      document.querySelectorAll("#assetTable tbody tr").forEach(row => {
-        const cells = row.querySelectorAll("td");
-        ws_data.push([
-          cells[0].textContent,
-          cells[1].textContent,
-          cells[2].textContent,
-          cells[3].textContent,
-          cells[4].textContent,
-          cells[5].textContent
-        ]);
-      });
-      const ws = XLSX.utils.aoa_to_sheet(ws_data);
-      XLSX.utils.book_append_sheet(wb, ws, "Assets");
-      XLSX.writeFile(wb, "Office_Asset_List.xlsx");
-    });
-
-    // === SEARCH FILTER ===
-    searchBox.addEventListener("keyup", () => {
-      const query = searchBox.value.toLowerCase();
-      const rows = tableBody.querySelectorAll("tr");
-      rows.forEach(row => {
-        const text = row.textContent.toLowerCase();
-        row.style.display = text.includes(query) ? "" : "none";
-      });
-    });
-
-    // === LOAD FROM GOOGLE SHEET ===
-    document.getElementById("loadGoogle").addEventListener("click", async () => {
-      const GOOGLE_SHEET_CSV_URL =
-        "https://docs.google.com/spreadsheets/d/1UjaZ2GcqlAW4vQWl1F37zp7DBgCpwbYdTEnqSzJqN5I/export?format=csv";
-      try {
-        status.textContent = "⏳ Loading from Google Sheet...";
-        const res = await fetch(GOOGLE_SHEET_CSV_URL);
-        const csvText = await res.text();
-        const workbook = XLSX.read(csvText, { type: "string" });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
-        allRecords = json; // store for searching if needed
-        displayData(json);
-      } catch (e) {
-        console.error(e);
-        status.textContent = "❌ Error loading Google Sheet. Check permissions or URL.";
-      }
-    });
-  </script>
 </body>
 </html>
