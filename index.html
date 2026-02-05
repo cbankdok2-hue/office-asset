@@ -1,225 +1,227 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Office Asset List – Always Show Empty User</title>
-    <style>
-        body { font-family: Segoe UI; background:#f4f6f8; padding:20px }
-        h2 { text-align:center; margin-bottom:10px }
-
-        #controls,#filters { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:10px }
-        button { padding:5px 10px; border:none; border-radius:5px; cursor:pointer }
-        .filter-btn { background:#546e7a; color:white; }
-        .filter-btn.active { background:#2e7d32; }
-        .edit-btn { background:#43a047; color:white }
-        .delete-btn { background:#e53935; color:white }
-
-        table { width:100%; border-collapse:collapse; background:#fff; margin-top:10px }
-        th,td { border:1px solid #ccc; padding:8px; text-align:center }
-        th { background:#1976d2; color:#fff }
-
-        .status { cursor:pointer; font-weight:bold; padding:4px 12px; border-radius:14px; display:inline-block }
-        .active { background:#e8f5e9; color:#2e7d32 }
-        .inactive { background:#fdecea; color:#c62828 }
-    </style>
+<meta charset="UTF-8">
+<title>Office Asset List – Admin Login</title>
+<style>
+body{font-family:Segoe UI;background:#f4f6f8;padding:20px}
+h2{text-align:center;margin-bottom:10px}
+#loginBox,#controls{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:15px}
+button{padding:6px 12px;border:none;border-radius:5px;cursor:pointer}
+.edit-btn{background:#43a047;color:#fff}
+.delete-btn{background:#e53935;color:#fff}
+table{width:100%;border-collapse:collapse;background:#fff}
+th,td{border:1px solid #ccc;padding:8px;text-align:center}
+th{background:#1976d2;color:#fff}
+.status{cursor:pointer;font-weight:bold;padding:4px 14px;border-radius:14px}
+.active{background:#e8f5e9;color:#2e7d32}
+.inactive{background:#fdecea;color:#c62828}
+.status.disabled{opacity:.5;cursor:not-allowed}
+.readonly{opacity:.6}
+</style>
 </head>
 <body>
 
-<h2>🏢 Office Asset List – Empty User Always Visible</h2>
+<h2>🏢 Office Asset List</h2>
 
-<div id="controls">
-    <button onclick="loadData()">🔄 Reload</button>
-    <button onclick="addRow()">➕ Add Asset</button>
-    <input id="searchBox" placeholder="🔍 Search...">
+<!-- ===== LOGIN BOX ===== -->
+<div id="loginBox">
+  <input id="loginEmail" placeholder="Enter your email">
+  <button onclick="login()">Login</button>
+</div>
+
+<!-- ===== CONTROLS ===== -->
+<div id="controls" style="display:none;">
+  <button onclick="loadData()">🔄 Reload</button>
+  <button id="addBtn" onclick="addRow()">➕ Add Asset</button>
+  <input id="searchBox" placeholder="🔍 Search...">
 </div>
 
 <div id="summary"></div>
 
 <table>
-    <thead>
-    <tr>
-        <th>No</th>
-        <th>Equipment</th>
-        <th>Description</th>
-        <th>Serial</th>
-        <th>DOK</th>
-        <th>User</th>
-        <th>Location</th>
-        <th>Status</th>
-        <th>Edit</th>
-        <th>Delete</th>
-    </tr>
-    </thead>
-    <tbody id="tbody"></tbody>
+<thead>
+<tr>
+<th>No</th><th>Equipment</th><th>Description</th><th>Serial</th>
+<th>DOK</th><th>User</th><th>Location</th>
+<th>Status</th><th>Edit</th><th>Delete</th>
+</tr>
+</thead>
+<tbody id="tbody"></tbody>
 </table>
 
 <script>
-    const API = "https://script.google.com/macros/s/AKfycbwXpn362zREgNE_K0JasXzNVOcW8u0XlGimELEmVUtIMkz2IF3ohFyPR8EjJnbAd0bSBQ/exec";
+/* ================= CONFIG ================= */
+const ADMIN_USERS = ["admin@dok.com","it@dok.com"];
+let currentUser="", isAdmin=false;
+const API="https://script.google.com/macros/s/AKfycbwXpn362zREgNE_K0JasXzNVOcW8u0XlGimELEmVUtIMkz2IF3ohFyPR8EjJnbAd0bSBQ/exec";
+const tbody=document.getElementById("tbody");
+const searchBox=document.getElementById("searchBox");
+const summary=document.getElementById("summary");
+const addBtn=document.getElementById("addBtn");
+const controls=document.getElementById("controls");
 
-    const tbody = document.getElementById("tbody");
-    const searchBox = document.getElementById("searchBox");
-    const summary = document.getElementById("summary");
+let allData=[], isBusy=false;
 
-    let allData = [];
-    let filterStatusValue = "ALL"; // Can be "ALL" or "Active" only
+/* ================= LOGIN ================= */
+function login(){
+    currentUser = document.getElementById("loginEmail").value.trim().toLowerCase();
+    if(!currentUser){ alert("Enter your email"); return; }
 
-    // Load data
-    async function loadData() {
-        const res = await fetch(API);
-        allData = await res.json();
-        render();
-    }
+    isAdmin = ADMIN_USERS.includes(currentUser);
+    controls.style.display="flex";             // show control panel
+    document.getElementById("loginBox").style.display="none"; // hide login
+    addBtn.style.display=isAdmin?"inline-block":"none";
 
-    // Render table
-    function render() {
-        tbody.innerHTML = "";
-        let index = 1, activeCount = 0, inactiveCount = 0;
+    loadData();
+}
 
-        allData.forEach(r=>{
-            const userVal = (r.User||"").trim();
-            const isEmptyUser = userVal==="";
-            const status = isEmptyUser ? "Inactive" : (r.Status||"Active");
+/* ================= LOAD DATA ================= */
+async function loadData(){
+ if(isBusy) return;
+ const res = await fetch(API);
+ allData = await res.json();
 
-            // Auto-fix backend if User empty
-            if(isEmptyUser && r.Status!=="Inactive"){
-                updateRow(r._rowIndex,{Status:"Inactive"});
-            }
+ // enforce empty user = inactive
+ allData.forEach(r=>{
+   if((r.User||"").trim()==="" && r.Status!=="Inactive"){
+     updateRow(r._rowIndex,{Status:"Inactive"},false);
+   }
+ });
 
-            // Count totals
-            if(status==="Active") activeCount++; else inactiveCount++;
+ render();
+}
 
-            // Filter logic: NEVER hide empty-user inactive rows
-            if(filterStatusValue==="Active" && status!=="Active" && !isEmptyUser) return;
+/* ================= RENDER ================= */
+function render(){
+ tbody.innerHTML="";
+ let i=1,ac=0,ic=0;
 
-            const tr = document.createElement("tr");
-            tr.dataset.row = r._rowIndex;
-            tr.dataset.status = status;
-            tr.dataset.emptyUser = isEmptyUser;
+ allData.forEach(r=>{
+   const user=(r.User||"").trim();
+   const empty=user==="";
+   const status=empty?"Inactive":(r.Status||"Active");
+   status==="Active"?ac++:ic++;
 
-            tr.innerHTML = `
-<td>${index++}</td>
+   const tr=document.createElement("tr");
+   tr.className=isAdmin?"":"readonly";
+
+   tr.innerHTML=`
+<td>${i++}</td>
 <td>${r.Equipment||""}</td>
 <td>${r["Equipment Description"]||""}</td>
 <td>${r["Serial Number"]||""}</td>
 <td>${r["DOK B-CORD"]||""}</td>
-<td>${userVal}</td>
+<td>${user}</td>
 <td>${r.Location||""}</td>
 <td>
-<span class="status ${status==="Inactive"?"inactive":"active"}"
- onclick="toggleStatus(${r._rowIndex},'${userVal}','${status}')">${status}</span>
+<span class="status ${status==="Active"?"active":"inactive"} ${(!isAdmin||empty)?"disabled":""}"
+onclick="toggleStatus(${r._rowIndex})">${status}</span>
 </td>
-<td><button class="edit-btn" onclick="editRow(this,${r._rowIndex})">Edit</button></td>
-<td><button class="delete-btn" onclick="deleteRow(${r._rowIndex})">Delete</button></td>
-`;
-            tbody.appendChild(tr);
-        });
+<td>${isAdmin?`<button class="edit-btn" onclick="editRow(this,${r._rowIndex})">Edit</button>`:"-"}</td>
+<td>${isAdmin?`<button class="delete-btn" onclick="deleteRow(${r._rowIndex})">Delete</button>`:"-"}</td>`;
+   tbody.appendChild(tr);
+ });
 
-        summary.textContent = `Total: ${allData.length} | Active: ${activeCount} | Inactive: ${inactiveCount}`;
-    }
+ summary.textContent=`User: ${currentUser} | Role: ${isAdmin?"Admin":"Viewer"} | Total: ${allData.length} | Active: ${ac} | Inactive: ${ic}`;
+}
 
-    // Filter Active only (Empty-user Inactive always visible)
-    function filterActiveOnly() {
-        filterStatusValue = filterStatusValue==="ALL" ? "Active" : "ALL";
-        render();
-    }
+/* ================= SEARCH ================= */
+searchBox.onfocus=()=>isBusy=true;
+searchBox.onblur=()=>isBusy=false;
+searchBox.onkeyup=()=>{
+ const q=searchBox.value.toLowerCase();
+ [...tbody.rows].forEach(r=>{
+   r.style.display=r.textContent.toLowerCase().includes(q)?"":"none";
+ });
+};
 
-    // Toggle status
-    function toggleStatus(rowIndex,user,status){
-        if(user===""){
-            alert("User empty → must be Inactive");
-            return;
-        }
-        const newStatus = status==="Active"?"Inactive":"Active";
-        updateRow(rowIndex,{Status:newStatus});
-    }
+/* ================= STATUS TOGGLE ================= */
+function toggleStatus(rowIndex){
+ if(!isAdmin){ alert("Admin access required"); return; }
+ const r = allData.find(x=>x._rowIndex===rowIndex);
+ if(!r || (r.User||"").trim()===""){ alert("User empty → must be Inactive"); return; }
+ const newStatus = r.Status==="Active"?"Inactive":"Active";
+ updateRow(rowIndex,{Status:newStatus});
+}
 
-    // Edit row
-    function editRow(btn,rowIndex){
-        const tr = btn.closest("tr");
-        const tds = tr.querySelectorAll("td");
+/* ================= EDIT ================= */
+function editRow(btn,rowIndex){
+ if(!isAdmin){ alert("Admin access required"); return; }
+ isBusy=true;
+ const tr=btn.closest("tr");
+ const t=tr.querySelectorAll("td");
 
-        if(btn.textContent==="Edit"){
-            for(let i=1;i<=6;i++) tds[i].innerHTML = `<input value="${tds[i].textContent}">`;
-            btn.textContent="Save";
-        }else{
-            const rowData = {
-                Equipment: tds[1].querySelector("input").value.trim(),
-                "Equipment Description": tds[2].querySelector("input").value.trim(),
-                "Serial Number": tds[3].querySelector("input").value.trim(),
-                "DOK B-CORD": tds[4].querySelector("input").value.trim(),
-                User: tds[5].querySelector("input").value.trim(),
-                Location: tds[6].querySelector("input").value.trim()
-            };
-            if(rowData.User==="") rowData.Status="Inactive";
-            updateRow(rowIndex,rowData);
-        }
-    }
+ if(btn.textContent==="Edit"){
+   for(let i=1;i<=6;i++) t[i].innerHTML=`<input value="${t[i].textContent}">`;
+   btn.textContent="Save";
+ }else{
+   const row={
+     Equipment:t[1].querySelector("input").value.trim(),
+     "Equipment Description":t[2].querySelector("input").value.trim(),
+     "Serial Number":t[3].querySelector("input").value.trim(),
+     "DOK B-CORD":t[4].querySelector("input").value.trim(),
+     User:t[5].querySelector("input").value.trim(),
+     Location:t[6].querySelector("input").value.trim()
+   };
+   if(row.User==="") row.Status="Inactive";
+   updateRow(rowIndex,row);
+ }
+}
 
-    // Delete row
-    function deleteRow(rowIndex){
-        if(confirm("Delete this row?")){
-            fetch(API,{method:"POST",body:JSON.stringify({action:"delete",rowIndex})}).then(loadData);
-        }
-    }
+/* ================= DELETE ================= */
+function deleteRow(rowIndex){
+ if(!isAdmin){ alert("Admin access required"); return; }
+ if(confirm("Delete this asset permanently?")){
+   isBusy=true;
+   fetch(API,{method:"POST",body:JSON.stringify({action:"delete",rowIndex})})
+   .then(()=>{isBusy=false; loadData();});
+ }
+}
 
-    // Add row
-    function addRow(){
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
+/* ================= ADD ================= */
+function addRow(){
+ if(!isAdmin){ alert("Admin access required"); return; }
+ isBusy=true;
+ const tr=document.createElement("tr");
+ tr.innerHTML=`
 <td>*</td>
-<td><input></td>
-<td><input></td>
-<td><input></td>
-<td><input></td>
-<td><input></td>
-<td><input></td>
+<td><input></td><td><input></td><td><input></td>
+<td><input></td><td><input></td><td><input></td>
 <td>Active</td>
 <td><button class="edit-btn" onclick="saveNew(this)">Save</button></td>
-<td><button class="delete-btn" onclick="this.closest('tr').remove()">Cancel</button></td>
-`;
-        tbody.prepend(tr);
-    }
+<td><button class="delete-btn" onclick="this.closest('tr').remove();isBusy=false;">Cancel</button></td>`;
+ tbody.prepend(tr);
+}
 
-    // Save new row
-    function saveNew(btn){
-        const tr = btn.closest("tr");
-        const c = tr.children;
-        const userVal = c[5].querySelector("input").value.trim();
-        const statusVal = userVal===""?"Inactive":"Active";
+/* ================= SAVE NEW ================= */
+function saveNew(btn){
+ const tr=btn.closest("tr");
+ const c=tr.children;
+ const user=c[5].querySelector("input").value.trim();
+ const row={
+  Equipment:c[1].querySelector("input").value.trim(),
+  "Equipment Description":c[2].querySelector("input").value.trim(),
+  "Serial Number":c[3].querySelector("input").value.trim(),
+  "DOK B-CORD":c[4].querySelector("input").value.trim(),
+  User:user,
+  Location:c[6].querySelector("input").value.trim(),
+  Status:user===""?"Inactive":"Active"
+ };
+ fetch(API,{method:"POST",body:JSON.stringify({action:"add",row})})
+ .then(()=>{isBusy=false; loadData();});
+}
 
-        const row = {
-            "Equipment": c[1].querySelector("input").value.trim(),
-            "Equipment Description": c[2].querySelector("input").value.trim(),
-            "Serial Number": c[3].querySelector("input").value.trim(),
-            "DOK B-CORD": c[4].querySelector("input").value.trim(),
-            "User": userVal,
-            "Location": c[6].querySelector("input").value.trim(),
-            "Status": statusVal
-        };
+/* ================= UPDATE ================= */
+function updateRow(rowIndex,row,refresh=true){
+ isBusy=true;
+ fetch(API,{method:"POST",body:JSON.stringify({action:"update",rowIndex,row})})
+ .then(()=>{isBusy=false;if(refresh) loadData();});
+}
 
-        fetch(API,{method:"POST",body:JSON.stringify({action:"add",row})}).then(loadData);
-    }
+/* ================= AUTO REFRESH ================= */
+setInterval(()=>{if(!isBusy) loadData();},60000);
 
-    // Update row
-    function updateRow(rowIndex,row){
-        fetch(API,{method:"POST",body:JSON.stringify({action:"update",rowIndex,row})}).then(loadData);
-    }
-
-    // Search (empty-user Inactive always visible)
-    searchBox.onkeyup = () => {
-        const q = searchBox.value.toLowerCase();
-        [...tbody.rows].forEach(r=>{
-            const userEmpty = r.dataset.emptyUser==="true";
-            if(userEmpty) {
-                r.style.display = "";
-                return;
-            }
-            r.style.display = r.textContent.toLowerCase().includes(q) ? "" : "none";
-        });
-    };
-
-    loadData();
-    setInterval(loadData,60000);
 </script>
 
 </body>
