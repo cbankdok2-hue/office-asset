@@ -1,278 +1,225 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Office Asset List (Live Update)</title>
+    <meta charset="UTF-8">
+    <title>Office Asset List – Always Show Empty User</title>
+    <style>
+        body { font-family: Segoe UI; background:#f4f6f8; padding:20px }
+        h2 { text-align:center; margin-bottom:10px }
 
-<style>
-  body {
-    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-    background: #f4f6f8;
-    margin: 0;
-    padding: 20px;
-  }
-  h2 {
-    text-align: center;
-    margin-bottom: 20px;
-  }
-  #controls {
-    display: flex;
-    justify-content: center;
-    gap: 10px;
-    margin-bottom: 15px;
-    flex-wrap: wrap;
-  }
-  button {
-    background-color: #1976d2;
-    color: white;
-    border: none;
-    padding: 8px 15px;
-    border-radius: 6px;
-    cursor: pointer;
-  }
-  button:hover {
-    background-color: #1565c0;
-  }
-  input[type="text"], td input {
-    padding: 6px;
-    width: 95%;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    background: white;
-    border-radius: 8px;
-    overflow: hidden;
-  }
-  th, td {
-    border: 1px solid #ddd;
-    padding: 8px;
-    text-align: center;
-  }
-  th {
-    background-color: #1976d2;
-    color: white;
-  }
-  tr:nth-child(even) {
-    background-color: #f9f9f9;
-  }
-  .edit-btn {
-    background-color: #43a047;
-  }
-  .delete-btn {
-    background-color: #e53935;
-  }
-  #status {
-    text-align: center;
-    margin-top: 10px;
-    font-style: italic;
-  }
-</style>
+        #controls,#filters { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:10px }
+        button { padding:5px 10px; border:none; border-radius:5px; cursor:pointer }
+        .filter-btn { background:#546e7a; color:white; }
+        .filter-btn.active { background:#2e7d32; }
+        .edit-btn { background:#43a047; color:white }
+        .delete-btn { background:#e53935; color:white }
+
+        table { width:100%; border-collapse:collapse; background:#fff; margin-top:10px }
+        th,td { border:1px solid #ccc; padding:8px; text-align:center }
+        th { background:#1976d2; color:#fff }
+
+        .status { cursor:pointer; font-weight:bold; padding:4px 12px; border-radius:14px; display:inline-block }
+        .active { background:#e8f5e9; color:#2e7d32 }
+        .inactive { background:#fdecea; color:#c62828 }
+    </style>
 </head>
-
 <body>
 
-<h2>🏢 Office Asset List (Live Google Sheet)</h2>
+<h2>🏢 Office Asset List – Empty User Always Visible</h2>
 
 <div id="controls">
-  <button id="loadGoogle">🔄 Load from Google Sheet</button>
-  <button id="addRow">➕ Add New Asset</button>
-  <button id="exportExcel">📤 Export to Excel</button>
-  <input type="text" id="searchBox" placeholder="🔍 Search..." />
+    <button onclick="loadData()">🔄 Reload</button>
+    <button onclick="addRow()">➕ Add Asset</button>
+    <input id="searchBox" placeholder="🔍 Search...">
 </div>
 
-<table id="assetTable">
-  <thead>
+<div id="summary"></div>
+
+<table>
+    <thead>
     <tr>
-      <th>No</th>
-      <th>Equipment</th>
-      <th>Equipment Description</th>
-      <th>Serial Number</th>
-      <th>DOK B-CORD</th>
-      <th>User</th>
-      <th>Location</th>
-      <th>Edit</th>
-      <th>Delete</th>
+        <th>No</th>
+        <th>Equipment</th>
+        <th>Description</th>
+        <th>Serial</th>
+        <th>DOK</th>
+        <th>User</th>
+        <th>Location</th>
+        <th>Status</th>
+        <th>Edit</th>
+        <th>Delete</th>
     </tr>
-  </thead>
-  <tbody></tbody>
+    </thead>
+    <tbody id="tbody"></tbody>
 </table>
 
-<p id="status">Ready.</p>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-
 <script>
-const tableBody = document.querySelector("#assetTable tbody");
-const status = document.getElementById("status");
-const searchBox = document.getElementById("searchBox");
-let allRecords = [];
+    const API = "https://script.google.com/macros/s/AKfycbwXpn362zREgNE_K0JasXzNVOcW8u0XlGimELEmVUtIMkz2IF3ohFyPR8EjJnbAd0bSBQ/exec";
 
-// ---------- HEADER MATCH ----------
-function normalizeHeader(h) {
-  return h.toLowerCase().replace(/\s|_/g, "");
-}
-function matchHeader(headers, names) {
-  const n = headers.map(normalizeHeader);
-  for (let name of names) {
-    const i = n.indexOf(normalizeHeader(name));
-    if (i !== -1) return headers[i];
-  }
-  return null;
-}
+    const tbody = document.getElementById("tbody");
+    const searchBox = document.getElementById("searchBox");
+    const summary = document.getElementById("summary");
 
-// ---------- INDEX UPDATE ----------
-function updateIndexes() {
-  let i = 1;
-  document.querySelectorAll("#assetTable tbody tr").forEach(row => {
-    if (row.style.display !== "none") {
-      row.querySelector(".row-index").textContent = i++;
+    let allData = [];
+    let filterStatusValue = "ALL"; // Can be "ALL" or "Active" only
+
+    // Load data
+    async function loadData() {
+        const res = await fetch(API);
+        allData = await res.json();
+        render();
     }
-  });
-}
 
-// ---------- DISPLAY DATA ----------
-function displayData(records) {
-  tableBody.innerHTML = "";
-  if (!records.length) {
-    status.textContent = "No data found.";
-    return;
-  }
+    // Render table
+    function render() {
+        tbody.innerHTML = "";
+        let index = 1, activeCount = 0, inactiveCount = 0;
 
-  const headers = Object.keys(records[0]);
-  const k = {
-    eq: matchHeader(headers, ["Equipment"]),
-    desc: matchHeader(headers, ["Equipment Description"]),
-    ser: matchHeader(headers, ["Serial Number"]),
-    dok: matchHeader(headers, ["DOK B-CORD"]),
-    user: matchHeader(headers, ["User"]),
-    loc: matchHeader(headers, ["Location"])
-  };
+        allData.forEach(r=>{
+            const userVal = (r.User||"").trim();
+            const isEmptyUser = userVal==="";
+            const status = isEmptyUser ? "Inactive" : (r.Status||"Active");
 
-  records.forEach(r => {
-    if (!r[k.eq]) return;
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="row-index"></td>
-      <td>${r[k.eq]}</td>
-      <td>${r[k.desc]}</td>
-      <td>${r[k.ser]}</td>
-      <td>${r[k.dok]}</td>
-      <td>${r[k.user]}</td>
-      <td>${r[k.loc]}</td>
-      <td><button class="edit-btn" onclick="editRow(this)">Edit</button></td>
-      <td><button class="delete-btn" onclick="deleteRow(this)">Delete</button></td>
-    `;
-    tableBody.appendChild(tr);
-  });
+            // Auto-fix backend if User empty
+            if(isEmptyUser && r.Status!=="Inactive"){
+                updateRow(r._rowIndex,{Status:"Inactive"});
+            }
 
-  updateIndexes();
-  status.textContent = `✅ Loaded ${tableBody.rows.length} assets`;
-}
+            // Count totals
+            if(status==="Active") activeCount++; else inactiveCount++;
 
-// ---------- EDIT / DELETE ----------
-window.editRow = btn => {
-  const row = btn.closest("tr");
-  const cells = row.querySelectorAll("td");
-  if (btn.textContent === "Edit") {
-    for (let i = 1; i <= 6; i++) {
-      const v = cells[i].textContent;
-      cells[i].innerHTML = `<input value="${v}">`;
+            // Filter logic: NEVER hide empty-user inactive rows
+            if(filterStatusValue==="Active" && status!=="Active" && !isEmptyUser) return;
+
+            const tr = document.createElement("tr");
+            tr.dataset.row = r._rowIndex;
+            tr.dataset.status = status;
+            tr.dataset.emptyUser = isEmptyUser;
+
+            tr.innerHTML = `
+<td>${index++}</td>
+<td>${r.Equipment||""}</td>
+<td>${r["Equipment Description"]||""}</td>
+<td>${r["Serial Number"]||""}</td>
+<td>${r["DOK B-CORD"]||""}</td>
+<td>${userVal}</td>
+<td>${r.Location||""}</td>
+<td>
+<span class="status ${status==="Inactive"?"inactive":"active"}"
+ onclick="toggleStatus(${r._rowIndex},'${userVal}','${status}')">${status}</span>
+</td>
+<td><button class="edit-btn" onclick="editRow(this,${r._rowIndex})">Edit</button></td>
+<td><button class="delete-btn" onclick="deleteRow(${r._rowIndex})">Delete</button></td>
+`;
+            tbody.appendChild(tr);
+        });
+
+        summary.textContent = `Total: ${allData.length} | Active: ${activeCount} | Inactive: ${inactiveCount}`;
     }
-    btn.textContent = "Save";
-  } else {
-    for (let i = 1; i <= 6; i++) {
-      cells[i].textContent = cells[i].querySelector("input").value;
+
+    // Filter Active only (Empty-user Inactive always visible)
+    function filterActiveOnly() {
+        filterStatusValue = filterStatusValue==="ALL" ? "Active" : "ALL";
+        render();
     }
-    btn.textContent = "Edit";
-  }
-};
 
-window.deleteRow = btn => {
-  if (confirm("Delete this record?")) {
-    btn.closest("tr").remove();
-    updateIndexes();
-    status.textContent = "🗑️ Row deleted.";
-  }
-};
-
-// ---------- ADD ROW ----------
-document.getElementById("addRow").onclick = () => {
-  const tr = document.createElement("tr");
-  tr.innerHTML = `
-    <td class="row-index"></td>
-    <td><input></td>
-    <td><input></td>
-    <td><input></td>
-    <td><input></td>
-    <td><input></td>
-    <td><input></td>
-    <td><button class="edit-btn" onclick="saveNewRow(this)">Save</button></td>
-    <td><button class="delete-btn" onclick="deleteRow(this)">Delete</button></td>
-  `;
-  tableBody.appendChild(tr);
-  updateIndexes();
-};
-
-window.saveNewRow = btn => {
-  const row = btn.closest("tr");
-  const inputs = row.querySelectorAll("input");
-  row.innerHTML = `
-    <td class="row-index"></td>
-    ${[...inputs].map(i => `<td>${i.value}</td>`).join("")}
-    <td><button class="edit-btn" onclick="editRow(this)">Edit</button></td>
-    <td><button class="delete-btn" onclick="deleteRow(this)">Delete</button></td>
-  `;
-  updateIndexes();
-};
-
-// ---------- SEARCH ----------
-searchBox.onkeyup = () => {
-  const q = searchBox.value.toLowerCase();
-  document.querySelectorAll("#assetTable tbody tr").forEach(r => {
-    r.style.display = r.textContent.toLowerCase().includes(q) ? "" : "none";
-  });
-  updateIndexes();
-};
-
-// ---------- EXPORT ----------
-document.getElementById("exportExcel").onclick = () => {
-  const data = [["No","Equipment","Description","Serial","DOK","User","Location"]];
-  document.querySelectorAll("#assetTable tbody tr").forEach(r => {
-    const c = r.querySelectorAll("td");
-    if (r.style.display !== "none") {
-      data.push([...c].slice(0,7).map(td => td.textContent));
+    // Toggle status
+    function toggleStatus(rowIndex,user,status){
+        if(user===""){
+            alert("User empty → must be Inactive");
+            return;
+        }
+        const newStatus = status==="Active"?"Inactive":"Active";
+        updateRow(rowIndex,{Status:newStatus});
     }
-  });
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), "Assets");
-  XLSX.writeFile(wb, "Office_Asset_List.xlsx");
-};
 
-// ---------- GOOGLE SHEET LOAD ----------
-const GOOGLE_SHEET_CSV_URL =
-  "https://docs.google.com/spreadsheets/d/1UjaZ2GcqlAW4vQWl1F37zp7DBgCpwbYdTEnqSzJqN5I/export?format=csv";
+    // Edit row
+    function editRow(btn,rowIndex){
+        const tr = btn.closest("tr");
+        const tds = tr.querySelectorAll("td");
 
-async function loadFromGoogle() {
-  try {
-    status.textContent = "⏳ Loading...";
-    const res = await fetch(GOOGLE_SHEET_CSV_URL);
-    const csv = await res.text();
-    const wb = XLSX.read(csv, { type: "string" });
-    const sheet = wb.Sheets[wb.SheetNames[0]];
-    const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-    displayData(json);
-  } catch {
-    status.textContent = "❌ Google Sheet load error";
-  }
-}
+        if(btn.textContent==="Edit"){
+            for(let i=1;i<=6;i++) tds[i].innerHTML = `<input value="${tds[i].textContent}">`;
+            btn.textContent="Save";
+        }else{
+            const rowData = {
+                Equipment: tds[1].querySelector("input").value.trim(),
+                "Equipment Description": tds[2].querySelector("input").value.trim(),
+                "Serial Number": tds[3].querySelector("input").value.trim(),
+                "DOK B-CORD": tds[4].querySelector("input").value.trim(),
+                User: tds[5].querySelector("input").value.trim(),
+                Location: tds[6].querySelector("input").value.trim()
+            };
+            if(rowData.User==="") rowData.Status="Inactive";
+            updateRow(rowIndex,rowData);
+        }
+    }
 
-document.getElementById("loadGoogle").onclick = loadFromGoogle;
-loadFromGoogle();
-setInterval(loadFromGoogle, 60000);
+    // Delete row
+    function deleteRow(rowIndex){
+        if(confirm("Delete this row?")){
+            fetch(API,{method:"POST",body:JSON.stringify({action:"delete",rowIndex})}).then(loadData);
+        }
+    }
+
+    // Add row
+    function addRow(){
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+<td>*</td>
+<td><input></td>
+<td><input></td>
+<td><input></td>
+<td><input></td>
+<td><input></td>
+<td><input></td>
+<td>Active</td>
+<td><button class="edit-btn" onclick="saveNew(this)">Save</button></td>
+<td><button class="delete-btn" onclick="this.closest('tr').remove()">Cancel</button></td>
+`;
+        tbody.prepend(tr);
+    }
+
+    // Save new row
+    function saveNew(btn){
+        const tr = btn.closest("tr");
+        const c = tr.children;
+        const userVal = c[5].querySelector("input").value.trim();
+        const statusVal = userVal===""?"Inactive":"Active";
+
+        const row = {
+            "Equipment": c[1].querySelector("input").value.trim(),
+            "Equipment Description": c[2].querySelector("input").value.trim(),
+            "Serial Number": c[3].querySelector("input").value.trim(),
+            "DOK B-CORD": c[4].querySelector("input").value.trim(),
+            "User": userVal,
+            "Location": c[6].querySelector("input").value.trim(),
+            "Status": statusVal
+        };
+
+        fetch(API,{method:"POST",body:JSON.stringify({action:"add",row})}).then(loadData);
+    }
+
+    // Update row
+    function updateRow(rowIndex,row){
+        fetch(API,{method:"POST",body:JSON.stringify({action:"update",rowIndex,row})}).then(loadData);
+    }
+
+    // Search (empty-user Inactive always visible)
+    searchBox.onkeyup = () => {
+        const q = searchBox.value.toLowerCase();
+        [...tbody.rows].forEach(r=>{
+            const userEmpty = r.dataset.emptyUser==="true";
+            if(userEmpty) {
+                r.style.display = "";
+                return;
+            }
+            r.style.display = r.textContent.toLowerCase().includes(q) ? "" : "none";
+        });
+    };
+
+    loadData();
+    setInterval(loadData,60000);
 </script>
 
 </body>
