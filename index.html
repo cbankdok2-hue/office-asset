@@ -96,10 +96,18 @@ async function loadData(){
 
  // enforce empty user inactive
  allData.forEach(r=>{
-   if((r.User||"").trim()==="" && r.Status!=="Inactive"){
-     updateRow(r._rowIndex,{Status:"Inactive"},false);
-   }
- });
+  const user = (r.User || "").trim();
+
+  // If user empty → force Inactive
+  if(user === "" && r.Status !== "Inactive"){
+    updateRow(r._rowIndex,{Status:"Inactive"},false);
+  }
+
+  // If user exists → force Active
+  if(user !== "" && r.Status !== "Active"){
+    updateRow(r._rowIndex,{Status:"Active"},false);
+  }
+});
 
  render();
 }
